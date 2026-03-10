@@ -1,0 +1,163 @@
+-- 批量迁移规则组管理系统数据库初始化脚本
+
+-- 规则组表
+CREATE TABLE IF NOT EXISTS `rule_group` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `name` VARCHAR(100) NOT NULL COMMENT '规则组名称',
+    `description` VARCHAR(500) DEFAULT NULL COMMENT '描述',
+    `source_host` VARCHAR(100) NOT NULL COMMENT '源数据库主机',
+    `source_port` INT NOT NULL DEFAULT 3306 COMMENT '源数据库端口',
+    `source_user` VARCHAR(50) NOT NULL COMMENT '源数据库用户名',
+    `source_password` VARCHAR(200) NOT NULL COMMENT '源数据库密码',
+    `target_host` VARCHAR(100) NOT NULL COMMENT '目标数据库主机',
+    `target_port` INT NOT NULL DEFAULT 3306 COMMENT '目标数据库端口',
+    `target_user` VARCHAR(50) NOT NULL COMMENT '目标数据库用户名',
+    `target_password` VARCHAR(200) NOT NULL COMMENT '目标数据库密码',
+    `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：0-禁用，1-启用',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `create_by` VARCHAR(50) DEFAULT NULL COMMENT '创建人',
+    `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_name` (`name`),
+    KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='规则组表';
+
+-- 迁移规则表
+CREATE TABLE IF NOT EXISTS `migration_rule` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `group_id` BIGINT NOT NULL COMMENT '规则组ID',
+    `rule_name` VARCHAR(100) NOT NULL COMMENT '规则名称',
+    `source_database` VARCHAR(100) NOT NULL COMMENT '源数据库名',
+    `source_table` VARCHAR(100) NOT NULL COMMENT '源表名',
+    `target_database` VARCHAR(100) DEFAULT NULL COMMENT '目标数据库名',
+    `target_table` VARCHAR(100) DEFAULT NULL COMMENT '目标表名',
+    `operation_type` VARCHAR(20) NOT NULL COMMENT '操作类型',
+    `columns` VARCHAR(1000) DEFAULT NULL COMMENT '指定列',
+    `where_condition` VARCHAR(500) DEFAULT NULL COMMENT 'WHERE条件',
+    `separator` VARCHAR(10) DEFAULT ',' COMMENT '字段分隔符',
+    `file_directory` VARCHAR(200) DEFAULT NULL COMMENT '文件目录',
+    `file_prefix` VARCHAR(100) DEFAULT NULL COMMENT '文件前缀',
+    `compress` TINYINT NOT NULL DEFAULT 0 COMMENT '是否压缩',
+    `with_ddl` TINYINT NOT NULL DEFAULT 0 COMMENT '是否导出DDL',
+    `with_header` TINYINT NOT NULL DEFAULT 0 COMMENT '是否包含表头',
+    `producer_count` INT NOT NULL DEFAULT 1 COMMENT '生产者并发数',
+    `consumer_count` INT NOT NULL DEFAULT 1 COMMENT '消费者并发数',
+    `batch_size` INT NOT NULL DEFAULT 200 COMMENT '批处理大小',
+    `extra_params` TEXT DEFAULT NULL COMMENT '额外参数JSON',
+    `priority` INT NOT NULL DEFAULT 0 COMMENT '优先级',
+    `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `deleted` TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_group_id` (`group_id`),
+    KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='迁移规则表';
+
+-- 批量任务表
+CREATE TABLE IF NOT EXISTS `batch_job` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `job_id` VARCHAR(50) NOT NULL COMMENT '任务唯一标识',
+    `group_id` BIGINT DEFAULT NULL COMMENT '规则组ID',
+    `rule_id` BIGINT DEFAULT NULL COMMENT '规则ID',
+    `job_name` VARCHAR(100) DEFAULT NULL COMMENT '任务名称',
+    `operation_type` VARCHAR(20) NOT NULL COMMENT '操作类型',
+    `source_database` VARCHAR(100) DEFAULT NULL COMMENT '源数据库',
+    `source_table` VARCHAR(100) DEFAULT NULL COMMENT '源表',
+    `target_database` VARCHAR(100) DEFAULT NULL COMMENT '目标数据库',
+    `target_table` VARCHAR(100) DEFAULT NULL COMMENT '目标表',
+    `command_args` TEXT DEFAULT NULL COMMENT '命令行参数',
+    `status` VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT '状态',
+    `total_rows` BIGINT NOT NULL DEFAULT 0 COMMENT '总行数',
+    `processed_rows` BIGINT NOT NULL DEFAULT 0 COMMENT '已处理行数',
+    `progress` INT NOT NULL DEFAULT 0 COMMENT '进度百分比',
+    `speed` DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT '处理速度',
+    `error_msg` TEXT DEFAULT NULL COMMENT '错误信息',
+    `start_time` DATETIME DEFAULT NULL COMMENT '开始时间',
+    `end_time` DATETIME DEFAULT NULL COMMENT '结束时间',
+    `duration` BIGINT NOT NULL DEFAULT 0 COMMENT '执行时长秒',
+    `concurrency` INT DEFAULT 1 COMMENT '并发执行数',
+    `total_rules` INT DEFAULT 0 COMMENT '规则总数',
+    `completed_rules` INT DEFAULT 0 COMMENT '已完成规则数',
+    `failed_rules` INT DEFAULT 0 COMMENT '失败规则数',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `create_by` VARCHAR(50) DEFAULT NULL COMMENT '创建人',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_job_id` (`job_id`),
+    KEY `idx_group_id` (`group_id`),
+    KEY `idx_rule_id` (`rule_id`),
+    KEY `idx_status` (`status`),
+    KEY `idx_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='批量任务表';
+
+-- 任务执行详情表
+CREATE TABLE IF NOT EXISTS `job_execution_detail` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `job_id` VARCHAR(50) NOT NULL COMMENT '任务ID',
+    `phase` VARCHAR(50) NOT NULL COMMENT '执行阶段',
+    `phase_status` VARCHAR(20) NOT NULL COMMENT '阶段状态',
+    `detail_info` TEXT DEFAULT NULL COMMENT '详情信息',
+    `start_time` DATETIME DEFAULT NULL COMMENT '开始时间',
+    `end_time` DATETIME DEFAULT NULL COMMENT '结束时间',
+    `duration_ms` BIGINT NOT NULL DEFAULT 0 COMMENT '耗时毫秒',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_job_id` (`job_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务执行详情表';
+
+-- 任务日志表
+CREATE TABLE IF NOT EXISTS `job_log` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `job_id` VARCHAR(50) NOT NULL COMMENT '任务ID',
+    `log_level` VARCHAR(10) NOT NULL COMMENT '日志级别',
+    `log_message` TEXT NOT NULL COMMENT '日志内容',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_job_id` (`job_id`),
+    KEY `idx_create_time` (`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务日志表';
+
+-- 任务规则快照表（保存执行时的规则副本）
+CREATE TABLE IF NOT EXISTS `job_rule_detail` (
+    `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
+    `job_id` VARCHAR(50) NOT NULL COMMENT '任务ID',
+    `rule_id` BIGINT NOT NULL COMMENT '原始规则ID',
+    `rule_name` VARCHAR(100) NOT NULL COMMENT '规则名称快照',
+    `source_database` VARCHAR(100) NOT NULL COMMENT '源数据库名',
+    `source_table` VARCHAR(100) NOT NULL COMMENT '源表名',
+    `target_database` VARCHAR(100) DEFAULT NULL COMMENT '目标数据库名',
+    `target_table` VARCHAR(100) DEFAULT NULL COMMENT '目标表名',
+    `operation_type` VARCHAR(20) NOT NULL COMMENT '操作类型',
+    `columns` VARCHAR(1000) DEFAULT NULL COMMENT '指定列',
+    `where_condition` VARCHAR(500) DEFAULT NULL COMMENT 'WHERE条件',
+    `separator` VARCHAR(10) DEFAULT ',' COMMENT '字段分隔符',
+    `file_directory` VARCHAR(200) DEFAULT NULL COMMENT '文件目录',
+    `file_prefix` VARCHAR(100) DEFAULT NULL COMMENT '文件前缀',
+    `compress` TINYINT NOT NULL DEFAULT 0 COMMENT '是否压缩',
+    `with_ddl` TINYINT NOT NULL DEFAULT 0 COMMENT '是否导出DDL',
+    `with_header` TINYINT NOT NULL DEFAULT 0 COMMENT '是否包含表头',
+    `producer_count` INT NOT NULL DEFAULT 1 COMMENT '生产者并发数',
+    `consumer_count` INT NOT NULL DEFAULT 1 COMMENT '消费者并发数',
+    `batch_size` INT NOT NULL DEFAULT 200 COMMENT '批处理大小',
+    `extra_params` TEXT DEFAULT NULL COMMENT '额外参数JSON',
+    `priority` INT NOT NULL DEFAULT 0 COMMENT '优先级',
+    `command_args` TEXT DEFAULT NULL COMMENT '命令行参数快照',
+    `status` VARCHAR(20) NOT NULL DEFAULT 'PENDING' COMMENT '执行状态',
+    `total_rows` BIGINT NOT NULL DEFAULT 0 COMMENT '总行数',
+    `processed_rows` BIGINT NOT NULL DEFAULT 0 COMMENT '已处理行数',
+    `progress` INT NOT NULL DEFAULT 0 COMMENT '进度百分比',
+    `error_msg` TEXT DEFAULT NULL COMMENT '错误信息',
+    `start_time` DATETIME DEFAULT NULL COMMENT '开始时间',
+    `end_time` DATETIME DEFAULT NULL COMMENT '结束时间',
+    `duration` BIGINT NOT NULL DEFAULT 0 COMMENT '执行时长秒',
+    `concurrency` INT DEFAULT 1 COMMENT '并发执行数',
+    `total_rules` INT DEFAULT 0 COMMENT '规则总数',
+    `completed_rules` INT DEFAULT 0 COMMENT '已完成规则数',
+    `failed_rules` INT DEFAULT 0 COMMENT '失败规则数',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_job_id` (`job_id`),
+    KEY `idx_rule_id` (`rule_id`),
+    KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务规则快照表';
